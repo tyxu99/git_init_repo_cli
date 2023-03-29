@@ -1,7 +1,7 @@
-const fs = require('fs');
-const path = require('path');
+import fs from "fs"
+import path from "path"
 
-module.exports = {
+export default {
     // 获取目录名称
     getCurrentDirectoryBase: () => {
         return path.basename(process.cwd());
