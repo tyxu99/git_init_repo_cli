@@ -1,68 +1,50 @@
-const CLI = require('clui');
-const Configstore = require('configstore');
-const Spinner = CLI.Spinner;
-const { Octokit } = require("@octokit/rest")
-const { createBasicAuth } = require('@octokit/auth-basic');
+import { Octokit } from "@octokit/rest";
+import CLUI from "clui";
+import fs from "fs";
+import configstore from "configstore";
 
-const inquirer = require('./inquirer');
-const pkg = require('../package.json');
-// 初始化本地的存储配置
-const conf = new Configstore(pkg.name);
+import chalk from "chalk";
+import inquirer from "./inquirer.js";
 
-// 模块内部的单例
-let octokit;
+const { Spinner } = CLUI;
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+const conf = new configstore(pkg.name);
 
-module.exports = {
-    // 获取实例
-    getInstance: () => {
-        return octokit;
-    },
+const getLocalToken = async () => {
+  const localToken = conf.get("github.token");
+  console.log("localtoken", localToken);
+  if (localToken) {
+    validateGithubToken(localToken);
+  } else {
+    const { githubToken = null } = await inquirer.askGithubToken();
+    if (githubToken) {
+      validateGithubToken(githubToken);
+    }
+  }
+};
 
-    // 获取本地token
-    getStoredGithubToken: () => {
-        return conf.get('github.token');
-    },
+const validateGithubToken = (token) => {
+  const octokit = new Octokit({
+    auth: token,
+  });
+  const spinner = new Spinner("Authing...");
+  spinner.start();
 
-    // 通过个人账号信息获取token
-    getPersonalAccessToken: async () => {
-        const credentials = await inquirer.askGithubCredentials();
-        const status = new Spinner('验证身份中，请等待...');
+  octokit
+    .request("GET /user")
+    .then(({ data, status }) => {
+      if (status === 200) {
+        conf.set("github.token", token);
+        console.log(chalk.yellow("授权成功"));
+      }
+    })
+    .catch((err) => {
+      console.log("auth failed", err);
+    })
+    .finally(() => spinner.stop());
+};
 
-        status.start();
-
-        const auth = createBasicAuth({
-            username: credentials.username,
-            password: credentials.password,
-            async on2Fa() {
-                status.stop();
-                const res = await inquirer.getTwoFactorAuthenticationCode();
-                status.start();
-                return res.twoFactorAuthenticationCode;
-            },
-            token: {
-                scopes: ['user', 'public_repo', 'repo', 'repo:status'],
-                note: 'ginit, the command-line tool for initalizing Git repos',
-            },
-        });
-
-        try {
-            const res = await auth();
-
-            if (res.token) {
-                conf.set('github.token', res.token);
-                return res.token;
-            } else {
-                throw new Error('GitHub token was not found in the response');
-            }
-        } finally {
-            status.stop();
-        }
-    },
-
-    // 通过token登陆
-    githubAuth: (token) => {
-        octokit = new Octokit({
-            auth: token,
-        });
-    },
+export default {
+  getLocalToken,
+  validateGithubToken,
 };

@@ -1,70 +1,66 @@
-const CLI = require('clui');
-const fs = require('fs');
-const git = require('simple-git/promise')();
-const Spinner = CLI.Spinner;
-const touch = require('touch');
-const _ = require('lodash');
+import CLUI from "clui";
+import fs from "fs";
+import git from "simple-git";
+import touch from "touch";
+import lodash from "lodash";
+import { Octokit } from "@octokit/rest";
+import configstore from "configstore";
+import inquirer from "./inquirer.js";
+import gh from "./github.js";
+import file from "./file.js";
 
-const inquirer = require('./inquirer');
-const gh = require('./github');
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
 
-module.exports = {
-    // 创建远程仓库
-    createRemoteRepo: async () => {
-        const github = gh.getInstance();
-        const answers = await inquirer.askRepoDetails();
+const { Spinner } = CLUI;
+const conf = new configstore(pkg.name);
 
-        const data = {
-            name: answers.name,
-            description: answers.description,
-            private: answers.visibility === 'private',
-        };
+export default {
+  createGitignore: async () => {
+    const filelist = lodash.without(fs.readdirSync("."), ".git", ".gitignore");
 
-        const status = new Spinner('创建远程仓库中...');
-        status.start();
+    if (filelist.length) {
+      const file = await inquirer.askIgnoreFiles(filelist);
+      if (file.ignore.length) {
+        fs.writeFileSync(".gitignore", file.ignore.join("\n"));
+      } else {
+        touch(".gitignore");
+      }
+    } else {
+      touch(".gitignore");
+    }
+  },
+  setupRepo: async () => {
+    const spinner = new Spinner("初始化本地仓库并推送到远程中...");
+    spinner.start();
 
-        try {
-            const response = await github.repos.createForAuthenticatedUser(data);
-            return response.data.ssh_url;
-        } finally {
-            status.stop();
-        }
-    },
-
-    // 创建git ignore
-    createGitignore: async () => {
-        const fileList = _.without(fs.readdirSync('.'), '.git', '.gitignore');
-
-        if (fileList.length) {
-            const answers = await inquirer.askIgnoreFiles(fileList);
-
-            if (answers.ignore.length) {
-                // 写入信息
-                fs.writeFileSync('.gitignore', answers.ignore.join('\n'));
-            } else {
-                // 创建文件
-                touch('.gitignore');
-            }
-        } else {
-            // 创建文件
-            touch('.gitignore');
-        }
-    },
-
-    // 设置
-    setupRepo: async (url) => {
-        const status = new Spinner('初始化本地仓库并推送到远端仓库中...');
-        status.start();
-
-        try {
-            await git.init();
-            await git.add('.gitignore');
-            await git.add('./*');
-            await git.commit('Initial commit')
-            await git.addRemote('origin', url);
-            await git.push('origin', 'master');
-        } finally {
-            status.stop();
-        }
-    },
+    try {
+      await git.init();
+      await git.add(".gitignore");
+      await git.add("./*");
+      await git.commit("Initial commit");
+      await git.addRemote("origin", url);
+      await git.push("origin", "master");
+    } finally {
+      spinner.stop();
+    }
+  },
+  createRemoteRepo: async () => {
+    const { name, description, type } = await inquirer.askRepoInfo();
+    const spinner = new Spinner("正在创建远程仓库...");
+    spinner.start();
+    const octokit = new Octokit({
+      auth: conf.get("github.token"),
+    });
+    octokit.repos
+      .createForAuthenticatedUser({
+        name,
+        description,
+        private: type === "private",
+      })
+      .then(({ status, data }) => {
+        console.log(status, data);
+      })
+      .catch((err) => console.log("errrrrrrr", err))
+      .finally(() => spinner.stop());
+  },
 };
