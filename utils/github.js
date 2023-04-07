@@ -12,30 +12,32 @@ const conf = new configstore(pkg.name);
 
 const getLocalToken = async () => {
   const localToken = conf.get("github.token");
-  console.log("localtoken", localToken);
   if (localToken) {
-    validateGithubToken(localToken);
+    return validateGithubToken(localToken, "local");
   } else {
     const { githubToken = null } = await inquirer.askGithubToken();
     if (githubToken) {
-      validateGithubToken(githubToken);
+      return validateGithubToken(githubToken, "input");
     }
   }
 };
 
-const validateGithubToken = (token) => {
+const validateGithubToken = (token, location) => {
   const octokit = new Octokit({
     auth: token,
   });
   const spinner = new Spinner("Authing...");
-  spinner.start();
+  location === "input" && spinner.start();
 
-  octokit
+  return octokit
     .request("GET /user")
-    .then(({ data, status }) => {
+    .then(({ status }) => {
       if (status === 200) {
-        conf.set("github.token", token);
-        console.log(chalk.yellow("授权成功"));
+        if (location === "input") {
+          conf.set("github.token", token);
+          console.log(chalk.yellow("授权成功"));
+        }
+        return token;
       }
     })
     .catch((err) => {

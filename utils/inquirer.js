@@ -1,17 +1,22 @@
 import inquirer from "inquirer";
 import files from "./file.js";
 import minimist from "minimist";
+import chalk from "chalk";
 
 export default {
-  askGithubToken: () =>
-    inquirer.prompt([
+  askGithubToken: () => {
+    console.log(
+      chalk.red("Scope", ["user", "public_repo", "repo", "repo:status"]),
+    );
+    return inquirer.prompt([
       {
         name: "githubToken",
         type: "input",
         message: "请输入github token",
         validate: (value) => !!value.length || "请输入github token",
       },
-    ]),
+    ]);
+  },
   askRepoInfo: () => {
     const argv = minimist(process.argv.slice(2));
     return inquirer.prompt([
@@ -39,11 +44,14 @@ export default {
       },
     ]);
   },
-  askIgnoreFiles: filelist => inquirer.prompt([{
-    type: "checkbox",
-    name: "ignore",
-    message: '选择你要忽略的文件',
-    choices: filelist,
-    default: ["node_modules", ".idea"]
-  }])
+  askIgnoreFiles: (filelist) =>
+    inquirer.prompt([
+      {
+        type: "checkbox",
+        name: "ignore",
+        message: "选择你要忽略的文件",
+        choices: filelist,
+        default: ["node_modules", ".idea"],
+      },
+    ]),
 };
